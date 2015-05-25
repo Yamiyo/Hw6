@@ -1,0 +1,211 @@
+﻿
+<!DOCTYPE html>
+<html>
+ <head> 
+  <title>3W3D-HW6-MD2</title> 
+<style>
+#container {
+    width:60%;
+    float:left;
+    background-color:pink;
+   margin-top: 5px;
+}
+
+#info {
+    position: absolute;
+    top: 0px;
+    width: 100%;
+    padding: 10px;
+    text-align: center;
+    color: #ffff00
+}
+body {
+    overflow: hidden;
+}
+</style>
+</head> 
+<h1><center>3W3D-Hw6 </center></h1>
+
+<hr>
+<div id="container">
+</div>
+
+<body> 
+
+<div id="info">
+</div>
+
+	
+<script id="myVertexShader" type="x-shader/x-vertex">
+    varying vec2 vUv;
+    void main() {
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vUv = uv;
+    }
+</script>
+<script id="myFragmentShader" type="x-shader/x-fragment">
+    uniform sampler2D texture;
+    varying vec2 vUv;
+
+    void main() {
+        vec4 color = texture2D(texture, vUv);
+        if (color.b > 0.85) discard;
+        else gl_FragColor = vec4(.2, .2, .2, 0.) + color;
+    }
+</script>
+<script type="x-shader/x-fragment" id="fragmentShaderDepth">
+    uniform sampler2D texture;
+    varying vec2 vUv;
+
+    vec4 pack_depth(const in float depth) {
+        const vec4 bit_shift = vec4(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0, 1.0);
+        const vec4 bit_mask = vec4(0.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
+        vec4 res = fract(depth * bit_shift);
+        res -= res.xxyz * bit_mask;
+        return res;
+    }
+
+    void main() {
+        vec4 pixel = texture2D(texture, vUv);
+        if (pixel.b > 0.85) discard;
+        gl_FragData[0] = pack_depth(gl_FragCoord.z);
+    }
+</script>
+
+<script src="js/three.js"></script> 
+<script src="js/OrbitControls.js"></script>
+<script src="js/dat.gui.min.js"></script> 
+
+<script>
+
+var scene, renderer, camera, mesh, spotLight,Md2IJ;
+var clock = new THREE.Clock();
+var orbitcontrols;
+
+init();
+render();
+
+function init () 
+{
+	scene = new THREE.Scene();
+
+	camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+	renderer = new THREE.WebGLRenderer();
+	renderer.setClearColor(new THREE.Color(0x888888, 1.0));
+	renderer.setSize(window.innerWidth, window.innerHeight);
+
+	document.body.appendChild (renderer.domElement);
+
+	camera.position.x = -50;
+	camera.position.y = 40;
+	camera.position.z = 160;
+	camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+	orbitcontrols = new THREE.OrbitControls(camera, renderer.domElement);
+	
+	renderer.shadowMapEnabled = true;
+    renderer.shadowMapType = THREE.PCFShadowMap;
+    spotLight = new THREE.SpotLight(0xffffff, 1);
+    spotLight.position.set(0, 300, 300);
+    spotLight.angle = Math.PI / 3;
+    spotLight.castShadow = true;
+    spotLight.shadowMapWidth = 1024;
+    spotLight.shadowMapHeight = 1024;
+    spotLight.shadowCameraNear = 5;
+    spotLight.shadowCameraFar = 4000;
+    spotLight.shadowCameraFov = spotLight.angle / Math.PI * 180;
+    spotLight.exponent = 20;
+    scene.add(spotLight);
+
+
+	var floorTexture = new THREE.ImageUtils.loadTexture( 'images/floor.jpeg' );
+    var ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400, 130, 130),new THREE.MeshLambertMaterial({ map: floorTexture, side: THREE.DoubleSide }));
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+	ground.receiveShadow = true;
+
+	var step = 0;
+
+	var controls = new function () {
+		// we need the first child, since it's a multimaterial
+		this.animations = 'crattack';
+		this.fps = 10;
+	}
+
+	var gui = new dat.GUI();
+	
+	var loader = new THREE.JSONLoader();
+	loader.load('models/Tris.js', function (geometry, mat) {
+		geometry.computeMorphNormals();
+
+		var mat = new THREE.MeshBasicMaterial(
+				{
+					map: THREE.ImageUtils.loadTexture("models/Abarlith.png"),
+					morphTargets: true, morphNormals: true
+				});
+
+		mesh = new THREE.MorphAnimMesh(geometry, mat);
+
+
+		mesh.rotation.y = 0.7;
+		mesh.parseAnimations();
+		
+		for (var i = -1; i <= 1; i++){
+			for (var j = -1; j <= 1; j++) {
+				Md2IJ = mesh.clone();
+				Md2IJ.name = "MD2";
+				Md2IJ.position.set (150*i,25,150*j);
+				Md2IJ.playAnimation('run', 10);
+				Md2IJ.castShadow = true;
+				Md2IJ.receiveShadow = true;
+				scene.add(Md2IJ);
+			}
+		}
+		
+		var animLabels = [];
+		for (var key in mesh.geometry.animations) {
+			if (key === 'length' || !mesh.geometry.animations.hasOwnProperty(key)) continue;
+			animLabels.push(key);
+		}
+				
+		gui.add(controls, 'animations', animLabels).onChange(function (e) {
+			Md2IJ.playAnimation(controls.animations, controls.fps);
+		});
+		gui.add(controls, 'fps', 1, 20).step(1).onChange(function (e) {
+			Md2IJ.playAnimation(controls.animations, controls.fps);
+		});
+		Md2IJ.playAnimation('run', 10);
+		
+
+		//scene.add(mesh);
+	});
+	
+
+	window.addEventListener ('resize', onWindowResize, false);	
+}
+
+function onWindowResize()
+{
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize (window.innerWidth, window.innerHeight);
+}
+
+
+function render() 
+{
+	var delta = clock.getDelta();
+	orbitcontrols.update();
+	
+	if (Md2IJ) {
+			Md2IJ.updateAnimation(delta * 1000);
+		}
+
+	requestAnimationFrame(render);
+	renderer.render(scene, camera);
+}
+
+</script>  
+ </body>
+</html>
